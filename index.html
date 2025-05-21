@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Predictor mínimo para y = 2x² - 3x + 1</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.10.0/tf.min.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        button { margin: 10px 0; }
+        #resultado { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h2>Predictor mínimo para y = 2x² - 3x + 1</h2>
+    
+    <button onclick="entrenarModelo()">Entrenar Modelo</button>
+    <br>
+    
+    <label>Valor de y: <input type="number" id="valorY" value="0" step="0.1"></label>
+    <button onclick="predecir()" id="botonPredecir" disabled>Predecir</button>
+    
+    <div id="resultado"></div>
+    
+    <script>
+        // Variables globales
+        let modelo = null;
+        
+        // Función para entrenar el modelo
+        async function entrenarModelo() {
+            document.getElementById("resultado").innerHTML = "Entrenando...";
+            
+            // Generar datos de entrenamiento simples
+            const datosX = [];
+            const datosY = [];
+            
+            // Generar 200 puntos entre -3 y 3
+            for (let i = -3; i <= 3; i += 0.03) {
+                datosX.push(i);
+                datosY.push(2 * Math.pow(i, 2) - 3 * i + 1);
+            }
+            
+            // Crear modelo secuencial simple
+            modelo = tf.sequential();
+            
+            // Una sola capa densa con salida lineal
+            modelo.add(tf.layers.dense({units: 20, activation: 'relu', inputShape: [1]}));
+            modelo.add(tf.layers.dense({units: 20, activation: 'relu'}));
+            modelo.add(tf.layers.dense({units: 1}));
+            
+            // Compilar el modelo
+            modelo.compile({
+                optimizer: tf.train.adam(0.01),
+                loss: 'meanSquaredError'
+            });
+            
+            // Invertir x e y para entrenar (queremos predecir x dado y)
+            const xs = tf.tensor2d(datosY, [datosY.length, 1]);
+            const ys = tf.tensor2d(datosX, [datosX.length, 1]);
+            
+            // Entrenar el modelo con 50 épocas
+            await modelo.fit(xs, ys, {
+                epochs: 50,
+                callbacks: {
+                    onEpochEnd: (epoch, logs) => {
+                        if (epoch % 10 === 0) {
+                            document.getElementById("resultado").innerHTML = 
+                                `Entrenando... Época ${epoch+1}/50, pérdida: ${logs.loss.toFixed(6)}`;
+                        }
+                    }
+                }
+            });
+            
+            document.getElementById("resultado").innerHTML = "Modelo entrenado. Listo para predecir.";
+            document.getElementById("botonPredecir").disabled = false;
+        }
+        
+        // Función para predecir
+        function predecir() {
+            if (!modelo) return;
+            
+            const valorY = parseFloat(document.getElementById("valorY").value);
+            
+            // Crear tensor con el valor y
+            const inputTensor = tf.tensor2d([valorY], [1, 1]);
+            
+            // Hacer la predicción para obtener x
+            const prediccion = modelo.predict(inputTensor);
+            const valorX = prediccion.dataSync()[0];
+            
+            // Verificar el resultado
+            const yCalculada = 2 * Math.pow(valorX, 2) - 3 * valorX + 1;
+            const error = Math.abs(yCalculada - valorY);
+
+            // Intentar encontrar otra solución si y <= 1.25 (mínimo de la parábola)
+            let otraSolucion = null;
+            if (valorY <= 1.25) {
+                // Usar la fórmula cuadrática directamente
+                const a = 2;
+                const b = -3;
+                const c = 1 - valorY;
+                const discriminante = b*b - 4*a*c;
+                
+                if (discriminante >= 0) {
+                    const x1 = (-b + Math.sqrt(discriminante)) / (2*a);
+                    const x2 = (-b - Math.sqrt(discriminante)) / (2*a);
+                    
+                    // Si la red encontró una solución, la otra es la fórmula
+                    if (Math.abs(valorX - x1) < 0.5) {
+                        otraSolucion = x2;
+                    } else {
+                        otraSolucion = x1;
+                    }
+                }
+            }
+
+            // Mostrar resultado
+            let html = `<p><strong>Valor de y:</strong> ${valorY}</p>`;
+            html += `<p><strong>Valor predicho de x:</strong> ${valorX.toFixed(4)}</p>`;
+            html += `<p><strong>Verificación:</strong> 2(${valorX.toFixed(4)})² - 3(${valorX.toFixed(4)}) + 1 = ${yCalculada.toFixed(4)}</p>`;
+            html += `<p><strong>Error:</strong> ${error.toFixed(6)}</p>`;
+            
+            // Mostrar segunda solución si existe
+            if (otraSolucion !== null) {
+                const y2 = 2 * Math.pow(otraSolucion, 2) - 3 * otraSolucion + 1;
+                const error2 = Math.abs(y2 - valorY);
+                
+                html += `<p><strong>Segunda solución de x:</strong> ${otraSolucion.toFixed(4)}</p>`;
+                html += `<p><strong>Verificación:</strong> 2(${otraSolucion.toFixed(4)})² - 3(${otraSolucion.toFixed(4)}) + 1 = ${y2.toFixed(4)}</p>`;
+                html += `<p><strong>Error:</strong> ${error2.toFixed(6)}</p>`;
+            }
+            
+            document.getElementById("resultado").innerHTML = html;
+        }
+    </script>
+</body>
+</html>
